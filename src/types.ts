@@ -17,6 +17,11 @@ export interface Question {
   correctAnswer: number;
 }
 
+export interface VocabularyItem {
+  word: string;
+  explanation: string;
+}
+
 export interface Chapter {
   id: number;
   title: string;

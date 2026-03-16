@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   BookOpen, 
@@ -24,9 +24,10 @@ import {
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { cn } from './lib/utils';
-import { Difficulty, Chapter, Question, Attempt, UserProgress, ReadingMode, ReaderSettings, Theme, Font } from './types';
+import { Difficulty, Chapter, Question, Attempt, UserProgress, ReadingMode, ReaderSettings, Theme, Font, VocabularyItem } from './types';
 import { CANTO_TITLES } from './constants';
 import { getChapter, getChapterQuestions } from './services/odysseyService';
+import { STATIC_VOCABULARY } from './data/vocabulary';
 
 const CHAPTER_COUNT = 24;
 
@@ -70,6 +71,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<'reader' | 'quiz' | 'stats' | 'difficulty' | 'chapters'>('difficulty');
   const [showSettings, setShowSettings] = useState(false);
+  const [highlightVocabulary, setHighlightVocabulary] = useState(false);
+  const [selectedVocab, setSelectedVocab] = useState<VocabularyItem | null>(null);
 
   // Reader settings
   const [settings, setSettings] = useState<ReaderSettings>(() => {
@@ -202,6 +205,84 @@ export default function App() {
     const avgScore = progress.attempts.reduce((acc, curr) => acc + curr.score, 0) / total;
     return { total, avgScore };
   }, [progress.attempts]);
+
+  const highlightText = (text: string) => {
+    if (!highlightVocabulary || !currentChapterId || !STATIC_VOCABULARY[currentChapterId]) {
+      return text;
+    }
+
+    const vocab = STATIC_VOCABULARY[currentChapterId];
+    const sortedVocab = [...vocab].sort((a, b) => b.word.length - a.word.length);
+    
+    let parts: (string | React.ReactNode)[] = [text];
+
+    sortedVocab.forEach(item => {
+      const newParts: (string | React.ReactNode)[] = [];
+      parts.forEach(part => {
+        if (typeof part !== 'string') {
+          newParts.push(part);
+          return;
+        }
+
+        const regex = new RegExp(`(\\b${item.word}\\b)`, 'gi');
+        const split = part.split(regex);
+        
+        split.forEach((s, i) => {
+          if (s.toLowerCase() === item.word.toLowerCase()) {
+            newParts.push(
+              <span 
+                key={`${item.word}-${i}-${Math.random()}`}
+                className={cn(
+                  "cursor-help border-b-2 transition-all px-0.5 rounded-sm",
+                  settings.theme === 'dark' 
+                    ? "bg-[#A0A080]/20 border-[#A0A080] hover:bg-[#A0A080]/40" 
+                    : "bg-yellow-200/50 border-yellow-500 hover:bg-yellow-300/50"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedVocab(item);
+                }}
+              >
+                {s}
+              </span>
+            );
+          } else if (s !== '') {
+            newParts.push(s);
+          }
+        });
+      });
+      parts = newParts;
+    });
+
+    return parts;
+  };
+
+  const processChildren = (children: React.ReactNode): React.ReactNode => {
+    return React.Children.map(children, child => {
+      if (typeof child === 'string') {
+        return highlightText(child);
+      }
+      if (React.isValidElement(child) && (child.props as any).children) {
+        return React.cloneElement(child, {
+          children: processChildren((child.props as any).children)
+        } as any);
+      }
+      return child;
+    });
+  };
+
+  const markdownComponents = {
+    p: ({ children }: any) => <p>{processChildren(children)}</p>,
+    li: ({ children }: any) => <li>{processChildren(children)}</li>,
+    em: ({ children }: any) => <em>{processChildren(children)}</em>,
+    strong: ({ children }: any) => <strong>{processChildren(children)}</strong>,
+    h1: ({ children }: any) => <h1>{processChildren(children)}</h1>,
+    h2: ({ children }: any) => <h2>{processChildren(children)}</h2>,
+    h3: ({ children }: any) => <h3>{processChildren(children)}</h3>,
+    h4: ({ children }: any) => <h4>{processChildren(children)}</h4>,
+    h5: ({ children }: any) => <h5>{processChildren(children)}</h5>,
+    h6: ({ children }: any) => <h6>{processChildren(children)}</h6>,
+  };
 
   return (
     <div className={cn("min-h-screen transition-colors duration-300", THEMES[settings.theme].bg, THEMES[settings.theme].text, FONTS[settings.font])}>
@@ -491,17 +572,32 @@ export default function App() {
               exit={{ opacity: 0, y: -20 }}
               className="space-y-8"
             >
-              <div className="space-y-4">
-                <h2 className={cn("text-4xl font-bold", THEMES[settings.theme].accent)}>{chapter?.title}</h2>
-                <div className="flex items-center space-x-4 text-sm opacity-50 italic">
-                  <span>Texto Íntegro</span>
-                  {readingMode === 'page' && chapter && (
-                    <>
-                      <div className="w-1 h-1 bg-current rounded-full" />
-                      <span>Página {chapter.pages[currentPageIndex]?.number}</span>
-                    </>
-                  )}
+              <div className="flex items-center justify-between">
+                <div className="space-y-4">
+                  <h2 className={cn("text-4xl font-bold", THEMES[settings.theme].accent)}>{chapter?.title}</h2>
+                  <div className="flex items-center space-x-4 text-sm opacity-50 italic">
+                    <span>Texto Íntegro</span>
+                    {readingMode === 'page' && chapter && (
+                      <>
+                        <div className="w-1 h-1 bg-current rounded-full" />
+                        <span>Página {chapter.pages[currentPageIndex]?.number}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
+
+                <button
+                  onClick={() => setHighlightVocabulary(!highlightVocabulary)}
+                  className={cn(
+                    "flex items-center space-x-2 px-6 py-3 rounded-2xl font-bold transition-all shadow-md",
+                    highlightVocabulary 
+                      ? (settings.theme === 'dark' ? "bg-[#A0A080] text-black" : "bg-[#5A5A40] text-white")
+                      : (settings.theme === 'dark' ? "bg-white/5 text-gray-400 border border-white/10" : "bg-white text-gray-400 border border-black/5")
+                  )}
+                >
+                  <Type size={18} />
+                  <span>Vocabulario</span>
+                </button>
               </div>
               
               <div className={cn(
@@ -526,7 +622,7 @@ export default function App() {
                       {chapter?.pages.map((p, i) => (
                         <div key={i} className="relative">
                           <span className="absolute -left-8 top-0 text-[10px] opacity-30 font-mono">p.{p.number}</span>
-                          <Markdown>{p.content}</Markdown>
+                          <Markdown components={markdownComponents as any}>{p.content}</Markdown>
                         </div>
                       ))}
                     </div>
@@ -537,7 +633,7 @@ export default function App() {
                       animate={{ opacity: 1, x: 0 }}
                       className="space-y-6"
                     >
-                      <Markdown>{chapter?.pages[currentPageIndex]?.content}</Markdown>
+                      <Markdown components={markdownComponents as any}>{chapter?.pages[currentPageIndex]?.content}</Markdown>
                     </motion.div>
                   )}
                 </div>
@@ -794,6 +890,53 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
+
+      {/* Vocabulary Popup */}
+      <AnimatePresence>
+        {selectedVocab && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center px-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedVocab(null)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className={cn(
+                "relative w-full max-w-md p-8 rounded-[2.5rem] shadow-2xl border",
+                settings.theme === 'dark' ? "bg-[#1E1E1E] border-white/10" : "bg-white border-black/5"
+              )}
+            >
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-widest opacity-50 font-bold">Vocabulario</span>
+                  <button 
+                    onClick={() => setSelectedVocab(null)}
+                    className="p-2 hover:bg-black/5 rounded-full transition-colors"
+                  >
+                    <XCircle size={20} className="opacity-50" />
+                  </button>
+                </div>
+                <h3 className={cn("text-3xl font-bold", THEMES[settings.theme].accent)}>{selectedVocab.word}</h3>
+                <p className="text-lg leading-relaxed opacity-80">{selectedVocab.explanation}</p>
+                <button
+                  onClick={() => setSelectedVocab(null)}
+                  className={cn(
+                    "w-full py-4 rounded-2xl font-bold transition-all mt-4",
+                    settings.theme === 'dark' ? "bg-[#A0A080] text-black" : "bg-[#5A5A40] text-white"
+                  )}
+                >
+                  Entendido
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
