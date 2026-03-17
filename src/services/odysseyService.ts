@@ -3,6 +3,7 @@ import { CANTO_TITLES } from "../constants";
 import { STATIC_QUESTIONS } from "../data/questions";
 import { GoogleGenAI, Type } from "@google/genai";
 import { BOOK_DATA } from "../data/book";
+import { PRIMARIA_DATA } from "../data/primaria";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -38,72 +39,83 @@ const ODYSSEY_RAW_DATA: Record<number, { title: string, startPage: number, endPa
 // Cache for questions
 const questionCache: Record<string, Question[]> = {};
 
-export async function getChapter(chapterId: number): Promise<Chapter> {
+export async function getChapter(chapterId: number, difficulty: Difficulty = "secundaria"): Promise<Chapter> {
   const info = ODYSSEY_RAW_DATA[chapterId];
   if (!info) throw new Error("Canto no encontrado");
 
+  // If it's for 4th grade, use static simplified data
+  if (difficulty === "primaria") {
+    const simplifiedText = PRIMARIA_DATA[chapterId] || "Contenido no disponible para este nivel.";
+    return {
+      id: chapterId,
+      title: `${info.title} (Versión para chicos)`,
+      pages: [{ number: 1, content: simplifiedText }],
+      fullText: simplifiedText
+    };
+  }
+
   // Check if we have local text
   const localText = BOOK_DATA[chapterId];
+  
+  if (!localText) {
+    // Fallback to AI extraction if local text is not available
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Extrae el texto íntegro y literal de las páginas ${info.startPage} a ${info.endPage} del PDF de La Odisea proporcionado. 
+      Devuelve el contenido organizado por página. No resumas, no cambies palabras. 
+      Formato JSON: { "pages": [{ "number": 3, "content": "..." }, ...] }`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            pages: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  number: { type: Type.INTEGER },
+                  content: { type: Type.STRING }
+                },
+                required: ["number", "content"]
+              }
+            }
+          },
+          required: ["pages"]
+        }
+      }
+    });
 
-  if (localText) {
-    // Split into pages (roughly 400 words per page)
-    const words = localText.trim().split(/\s+/);
-    const wordsPerPage = 400;
-    const pages = [];
+    const data = JSON.parse(response.text || "{}");
+    const pages = data.pages || [];
+    const fullText = pages.map((p: any) => p.content).join("\n\n");
     
-    for (let i = 0; i < words.length; i += wordsPerPage) {
-      const pageWords = words.slice(i, i + wordsPerPage);
-      pages.push({
-        number: Math.floor(i / wordsPerPage) + 1,
-        content: pageWords.join(" ")
-      });
-    }
-
     return {
       id: chapterId,
       title: info.title,
       pages,
-      fullText: localText
+      fullText
     };
   }
 
-  // Fallback to AI extraction if local text is not available
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `Extrae el texto íntegro y literal de las páginas ${info.startPage} a ${info.endPage} del PDF de La Odisea proporcionado. 
-    Devuelve el contenido organizado por página. No resumas, no cambies palabras. 
-    Formato JSON: { "pages": [{ "number": 3, "content": "..." }, ...] }`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          pages: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                number: { type: Type.INTEGER },
-                content: { type: Type.STRING }
-              },
-              required: ["number", "content"]
-            }
-          }
-        },
-        required: ["pages"]
-      }
-    }
-  });
-
-  const data = JSON.parse(response.text || "{}");
-  const pages = data.pages || [];
-  const fullText = pages.map((p: any) => p.content).join("\n\n");
+  // Split into pages (roughly 400 words per page)
+  const words = localText.trim().split(/\s+/);
+  const wordsPerPage = 400;
+  const pages = [];
+  
+  for (let i = 0; i < words.length; i += wordsPerPage) {
+    const pageWords = words.slice(i, i + wordsPerPage);
+    pages.push({
+      number: Math.floor(i / wordsPerPage) + 1,
+      content: pageWords.join(" ")
+    });
+  }
 
   return {
     id: chapterId,
     title: info.title,
     pages,
-    fullText
+    fullText: localText
   };
 }
 

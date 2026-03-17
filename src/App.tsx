@@ -132,7 +132,7 @@ export default function App() {
   const loadChapter = async (id: number, startAtPage?: number) => {
     setLoading(true);
     try {
-      const content = await getChapter(id);
+      const content = await getChapter(id, difficulty || 'secundaria');
       setChapter(content);
       setCurrentChapterId(id);
       setCurrentPageIndex(startAtPage ?? 0);
@@ -447,7 +447,7 @@ export default function App() {
               className="flex flex-col items-center justify-center py-20 space-y-4"
             >
               <Loader2 className="animate-spin text-[#5A5A40]" size={48} />
-              <p className="italic text-gray-500">Extrayendo texto literal del PDF...</p>
+              <p className="italic text-gray-500">Preparando el Canto para tu lectura...</p>
             </motion.div>
           ) : view === 'difficulty' ? (
             <motion.div 
@@ -464,9 +464,9 @@ export default function App() {
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {[
-                  { id: 'primaria', label: '4to Grado', icon: Baby, desc: 'Preguntas sencillas' },
-                  { id: 'secundaria', label: 'Secundaria', icon: GraduationCap, desc: 'Análisis moderado' },
-                  { id: 'adulto', label: 'Adulto', icon: User, desc: 'Análisis profundo' }
+                  { id: 'primaria', label: '4to Grado', icon: Baby, desc: 'Versión Argentina (Narrativa)' },
+                  { id: 'secundaria', label: 'Secundaria', icon: GraduationCap, desc: 'Texto íntegro original' },
+                  { id: 'adulto', label: 'Adulto', icon: User, desc: 'Texto íntegro original' }
                 ].map((level) => (
                   <button
                     key={level.id}
