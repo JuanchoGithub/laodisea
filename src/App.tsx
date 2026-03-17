@@ -207,11 +207,11 @@ export default function App() {
   }, [progress.attempts]);
 
   const highlightText = (text: string) => {
-    if (!highlightVocabulary || !currentChapterId || !STATIC_VOCABULARY[currentChapterId]) {
+    if (!highlightVocabulary || !currentChapterId || !difficulty || !STATIC_VOCABULARY[difficulty]?.[currentChapterId]) {
       return text;
     }
 
-    const vocab = STATIC_VOCABULARY[currentChapterId];
+    const vocab = STATIC_VOCABULARY[difficulty][currentChapterId];
     const sortedVocab = [...vocab].sort((a, b) => b.word.length - a.word.length);
     
     let parts: (string | React.ReactNode)[] = [text];
